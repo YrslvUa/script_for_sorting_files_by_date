@@ -1,55 +1,54 @@
 import os
 import time
 import shutil
-from zipfile import ZipFile, BadZipFile
+from zipfile import ZipFile
 
 
 class FileOrganizer:
-    def __init__(self, source, target_folder_param):
+    def __init__(self, source, target_folder):
         self.source = source
-        self.target_folder = target_folder_param
+        self.target_folder = target_folder
 
-    def organize(self):
-        if self.is_zip_file():
-            self.process_zip_file()
+    def organize_files(self):
+        if os.path.isdir(self.source):
+            self.organize_files_from_folder()
+        elif os.path.isfile(self.source) and self.source.endswith('.zip'):
+            self.organize_files_from_zip()
         else:
-            self.process_folder()
+            raise ValueError("Invalid source. Please provide a folder or a zip file.")
 
-    def is_zip_file(self):
-        try:
-            with ZipFile(self.source) as _:
-                return True
-        except BadZipFile:
-            return False
-
-    def process_zip_file(self):
-        with ZipFile(self.source, 'r') as zip_ref:
-            for file in zip_ref.infolist():
-                self.process_file(file.filename, zip_ref.extract(file))
-
-    def process_folder(self):
+    def organize_files_from_folder(self):
         for root, _, files in os.walk(self.source):
             for file in files:
-                file_path = os.path.join(root, file)
-                self.process_file(file, file_path)
+                self.process_file(os.path.join(root, file))
 
-    def process_file(self, file_name, file_path):
-        if not os.path.isfile(file_path):
-            return
+    def organize_files_from_zip(self):
+        with ZipFile(self.source, 'r') as zip_ref:
+            for file in zip_ref.infolist():
+                self.process_file(file)
 
-        file_creation_time = os.path.getmtime(file_path)
-        file_creation_date = time.gmtime(file_creation_time)
-        year = file_creation_date.tm_year
-        month = file_creation_date.tm_mon
+    def process_file(self, file_info):
+        if isinstance(file_info, str):
+            file_creation_time = os.path.getmtime(file_info)
+            file_creation_date = time.gmtime(file_creation_time)
+            year = file_creation_date.tm_year
+            month = file_creation_date.tm_mon
+        else:
+            file_creation_time = file_info.date_time
+            year, month = file_creation_time[0], file_creation_time[1]
 
         target_folder = os.path.join(self.target_folder, str(year), f"{month:02d}")
         os.makedirs(target_folder, exist_ok=True)
 
-        shutil.copy2(file_path, os.path.join(target_folder, file_name))
+        if isinstance(file_info, str):
+            shutil.copy2(file_info, target_folder)
+        else:
+            with ZipFile(self.source, 'r') as zip_ref:
+                zip_ref.extract(file_info, target_folder)
 
 
 if __name__ == "__main__":
     source = "icons.zip"
-    target_folder = "files_by_year_month"
-    run_script = FileOrganizer(source=source, target_folder_param=target_folder)
-    run_script.organize()
+    target_folder = "icons_by_year_2"
+    organizer = FileOrganizer(source, target_folder)
+    organizer.organize_files()
